@@ -1,27 +1,22 @@
-import cv2
-import torch
-import zenoh
-import numpy as np
+import argparse
+import os
 from ultralytics import YOLO
 
-model = YOLO("models/.pt") #TODO: sajat model
+def detect_video(model_path, video_path, save_dir, view_img):
+    os.makedirs(save_dir, exist_ok=True)
 
-session = zenoh.open()
-sub = session.declare_subscriber("video/frame")
+    model = YOLO(model_path)
+    model.predict(source=video_path, save=True, project=save_dir, name="detections", show=view_img)
 
-def detect_objects(image):
-    results = model(image)  
-    return results
+    print(f"✅ Detection completed! Results saved in {save_dir}/detections")
 
-while True:
-    data = sub.recv()
-    np_arr = np.frombuffer(data.payload, np.uint8)
-    frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    
-    results = detect_objects(frame)  #
-    for r in results:
-        for box in r.boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run YOLOv11 detection on a video.")
+    parser.add_argument("--model", type=str, required=True, help="Path to trained YOLO model (e.g., yolov11.pt)")
+    parser.add_argument("--video", type=str, required=True, help="Path to input video file")
+    parser.add_argument("--save_dir", type=str, default="results", help="Directory to save detection results (default: results/)")
+    parser.add_argument("--view-img", action="store_true", help="Show detection results in a window")
 
-    session.put("video/detected", cv2.imencode(".jpg", frame)[1].tobytes())
+    args = parser.parse_args()
+    detect_video(args.model, args.video, args.save_dir, args.view_img)
+

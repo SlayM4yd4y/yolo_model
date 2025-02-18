@@ -1,13 +1,32 @@
 import argparse
 import os
+import yaml
 from ultralytics import YOLO
+import torch  
+
+def get_next_train_folder(base_dir):
+    os.makedirs(base_dir, exist_ok=True)
+    existing_dirs = [d for d in os.listdir(base_dir) if d.startswith("train") and d[5:].isdigit()]
+    train_nums = [int(d[5:]) for d in existing_dirs if d[5:].isdigit()]
+    next_train_num = max(train_nums) + 1 if train_nums else 1
+    return os.path.join(base_dir, f"train{next_train_num}")
 
 def train_yolo(model_config, data_config, hyp_config, epochs, batch_size, img_size, output_format, save_dir):
+    train_folder = get_next_train_folder(save_dir)
+    os.makedirs(train_folder, exist_ok=True)
+
     print(f"🔹 Training YOLOv11 with:")
     print(f"- Model config: {model_config}")
     print(f"- Data config: {data_config}")
     print(f"- Hyperparameters: {hyp_config}")
     print(f"- Epochs: {epochs}, Batch size: {batch_size}, Image size: {img_size}")
+    print(f"- Saving to: {train_folder}")
+
+    hyp_params = {}
+    if os.path.exists(hyp_config):
+        with open(hyp_config, "r") as f:
+            hyp_params = yaml.safe_load(f)
+            print(f"✅ Loaded hyperparameters from {hyp_config}")
 
     model = YOLO(model_config)
     model.train(
@@ -15,22 +34,25 @@ def train_yolo(model_config, data_config, hyp_config, epochs, batch_size, img_si
         epochs=epochs,
         batch=batch_size,
         imgsz=img_size,
-        hyp=hyp_config,
-        device="cuda"
+        device="cuda",
+        project=save_dir,
+        name=os.path.basename(train_folder),
+        **hyp_params  
     )
+
     os.makedirs(save_dir, exist_ok=True)
+    output_path = os.path.join(train_folder, "yolov11.pt")
 
     if output_format == "onnx":
-        output_path = os.path.join(save_dir, "yolov11.onnx")
+        output_path = os.path.join(train_folder, "yolov11.onnx")
         model.export(format="onnx", path=output_path)
         print(f"✅ Model exported as ONNX: {output_path}")
     else:
-        output_path = os.path.join(save_dir, "yolov11.pt")
-        model.save(output_path)
+        torch.save(model.model.state_dict(), output_path)  
         print(f"✅ Model trained and saved as {output_path}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train YOLOv11 from scratch with custom settings.")
+    parser = argparse.ArgumentParser(description="Train YOLOv11")
 
     parser.add_argument("--model", type=str, required=True, help="Path to YOLOv11 model YAML (e.g., yolov11.yaml)")
     parser.add_argument("--data", type=str, required=True, help="Path to dataset YAML (e.g., data.yaml)")
@@ -40,6 +62,6 @@ if __name__ == "__main__":
     parser.add_argument("--imgsz", type=int, default=640, help="Image size for training (default: 640)")
     parser.add_argument("--format", type=str, choices=["pt", "onnx"], default="pt", help="Model output format (default: pt)")
     parser.add_argument("--save_dir", type=str, default="models", help="Directory to save the trained model (default: models/)")
-    args = parser.parse_args()
 
+    args = parser.parse_args()
     train_yolo(args.model, args.data, args.hyp, args.epochs, args.batch, args.imgsz, args.format, args.save_dir)
