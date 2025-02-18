@@ -1,0 +1,11 @@
+{
+    "session": {
+      "mode": "peer",
+      "connect": ["tcp/127.0.0.1:7447"]
+    },
+    "topics": {
+      "video_input": "video/frame",
+      "video_output": "video/detected"
+    }
+  }
+  
