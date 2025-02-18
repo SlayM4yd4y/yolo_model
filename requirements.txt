@@ -1,0 +1,11 @@
+torch
+torchvision
+torchaudio
+onnx
+onnxruntime
+opencv-python
+numpy
+matplotlib
+tqdm
+zenoh
+eclipse-zenoh==1.2.1
