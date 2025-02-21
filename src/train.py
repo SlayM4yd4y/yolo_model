@@ -1,8 +1,5 @@
-import argparse
-import os
-import yaml
+import argparse, os, yaml, torch
 from ultralytics import YOLO
-import torch  
 
 def get_next_train_folder(base_dir):
     os.makedirs(base_dir, exist_ok=True)

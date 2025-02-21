@@ -20,7 +20,3 @@ std::string get_package_path() {
     return "NULL";
 }
 
-int main() {
-    std::cout << get_package_path() << std::endl;
-    return 0;
-}

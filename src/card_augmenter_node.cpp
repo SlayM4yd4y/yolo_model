@@ -8,61 +8,81 @@
 
 namespace fs = std::filesystem;
 
-CardAugmenterNode::CardAugmenterNode(const std::string& cards_dir, const std::string& output_dir)
-    : Node("card_augmenter_node"), rng_(std::random_device{}()), output_dir_(output_dir) {
-    RCLCPP_INFO(this->get_logger(), "CardAugmenterNode konstruktor kezdete");
+class CardAugmenter  {
+    public:
+        CardAugmenter(const std::string& cards_dir, const std::string& output_dir);
+        void processAllCards();
+        inline const std::vector<cv::Mat>& getCardImages() const;
+        inline const std::vector<std::string>& getBackgroundImagesPaths() const;
+        inline std::string getOutputDir() const;
+        inline void setCardsDir(const std::string& cards_dir);
+        inline void setOutputDir(const std::string& output_dir);
+    private:
+        inline cv::Mat loadCardImage(const std::string& image_path);
+        cv::Mat augmentCard(const cv::Mat& card, const cv::Mat background);
+        inline cv::Mat loadRandomBackground();
+        inline void saveGeneratedImage(const cv::Mat& image, int index);
+        std::vector<cv::Mat> card_images_;
+        std::vector<std::string> background_images_paths_;
+        std::string output_dir_;
+        mutable std::mt19937 rng_;
+    };
+
+CardAugmenter::CardAugmenter(const std::string& cards_dir, const std::string& output_dir)
+    : rng_(std::random_device{}()), output_dir_(output_dir) {
+    std::cout << "CardAugmenterNode konstruktor kezdete" << std::endl;
     setCardsDir(cards_dir);
-    RCLCPP_INFO(this->get_logger(), "Kártyák betöltve a mappából: %s", cards_dir.c_str());
-    std::string backgrounds_dir =   package_path() +"/img/background_samples";  
+    std::cout << "Kártyák betöltve a mappából: " << cards_dir.c_str() << std::endl;
+    std::string backgrounds_dir =   get_package_path() +"/img/background_samples";  
     for (const auto& entry : fs::directory_iterator(backgrounds_dir)) {
         background_images_paths_.emplace_back(entry.path().string());
         if (background_images_paths_.size() >= 45) break;
     }
     if (background_images_paths_.empty() || card_images_.empty()) {
-        RCLCPP_ERROR(this->get_logger(), "Üres kártya- vagy háttérkép-mappa.");
-        rclcpp::shutdown();
+        std::cerr << "Hiba: Üres kártya- vagy háttérkép-mappa." << std::endl;
+        exit(1);
     }
-    RCLCPP_INFO(this->get_logger(), "CardAugmenterNode konstruktor vége");
+    std::cout << "CardAugmenter konstruktor vége" << std::endl;
 }
-// Getterek
-inline const std::vector<cv::Mat>& CardAugmenterNode::getCardImages() const { return card_images_; }
-inline const std::vector<std::string>& CardAugmenterNode::getBackgroundImagesPaths() const { return background_images_paths_; }
-inline std::string CardAugmenterNode::getOutputDir() const { return output_dir_; }
-// Setterek
-inline void CardAugmenterNode::setCardsDir(const std::string& cards_dir) {
+
+inline const std::vector<cv::Mat>& CardAugmenter::getCardImages() const { return card_images_; }
+inline const std::vector<std::string>& CardAugmenter::getBackgroundImagesPaths() const { return background_images_paths_; }
+inline std::string CardAugmenter::getOutputDir() const { return output_dir_; }
+
+inline void CardAugmenter::setCardsDir(const std::string& cards_dir) {
     card_images_.clear();
-    RCLCPP_INFO(this->get_logger(), "Kártyák betöltése mappából: %s", cards_dir.c_str());
+    std::cout << "Kártyák betöltése mappából: " << cards_dir.c_str() << std::endl;
     for (const auto& entry : fs::directory_iterator(cards_dir)) {
         auto card_image = loadCardImage(entry.path().string());
         if (!card_image.empty()) {
             // 3csatornás kép konvertálása 4csatornásra
             if (card_image.channels() == 3) {
                 cv::cvtColor(card_image, card_image, cv::COLOR_BGR2BGRA);
-                RCLCPP_INFO(this->get_logger(), "Kártyakép konvertálva RGBA formátumba: %s", entry.path().c_str());
+                std::cout << "Kártyakép konvertálva RGBA formátumba: " << entry.path().c_str() << std::endl;
             }
             card_images_.emplace_back(card_image);
-            RCLCPP_INFO(this->get_logger(), "Kép betöltve: %s", entry.path().c_str());
+            std::cout << "Kép betöltve: " << entry.path().c_str() << std::endl;
         } else {
-            RCLCPP_WARN(this->get_logger(), "Hiba a kártyakép betöltésében: %s", entry.path().c_str());
+            std::cerr << "Hiba a kártyakép betöltésében: " << entry.path().c_str() << std::endl;
         }
     }
-    RCLCPP_INFO(this->get_logger(), "Kártyák betöltése befejezve, összesen %lu kép található.", card_images_.size());
+    std::cout << "Kártyák betöltése befejezve, összesen " << card_images_.size() << " kép található." << std::endl;
 }
 
-inline void CardAugmenterNode::setOutputDir(const std::string& output_dir) {
+inline void CardAugmenter::setOutputDir(const std::string& output_dir) {
     if (!output_dir.empty()) {
         output_dir_ = output_dir;
     } else {
-        RCLCPP_WARN(this->get_logger(), "Az output mappa elérési útja nem lehet üres.");
+        std::cerr << "Hiba: Az output mappa elérési útja nem lehet üres." << std::endl;
     }
 }
-inline cv::Mat CardAugmenterNode::loadCardImage(const std::string& image_path) {
+inline cv::Mat CardAugmenter::loadCardImage(const std::string& image_path) {
     return cv::imread(image_path, cv::IMREAD_UNCHANGED);
 }
-inline cv::Mat CardAugmenterNode::loadRandomBackground() {
+inline cv::Mat CardAugmenter::loadRandomBackground() {
     std::uniform_int_distribution<int> dist(0, background_images_paths_.size() - 1);
     std::string background_path = background_images_paths_[dist(rng_)];
-    RCLCPP_INFO(this->get_logger(), "Háttérkép betöltése innen: %s", background_path.c_str());
+    std::cout << "Háttérkép betöltése innen: " << background_path.c_str() << std::endl;
     return cv::imread(background_path);
 }
 //egy kártyás verzió
@@ -114,9 +134,9 @@ inline cv::Mat CardAugmenterNode::loadRandomBackground() {
     }
     return augmented_background;
 }*/
-cv::Mat CardAugmenterNode::augmentCard(const cv::Mat& card, cv::Mat background) {
+cv::Mat CardAugmenter::augmentCard(const cv::Mat& card, cv::Mat background) {
     if (card.empty() || background.empty()) {
-        RCLCPP_ERROR(this->get_logger(), "A kártya vagy a háttér üres kép!");
+        std::cerr << "Hiba: A kártya vagy a háttér üres kép!" << std::endl;
         return background;
     }
 
@@ -145,7 +165,7 @@ cv::Mat CardAugmenterNode::augmentCard(const cv::Mat& card, cv::Mat background) 
                    cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0, 0));
 
     if (larger_card.empty()) {
-        RCLCPP_ERROR(this->get_logger(), "Az elforgatott kártya üres!");
+        std::cout << "Az elforgatott kártya üres!" << std::endl;
         return background;
     }
 
@@ -165,14 +185,14 @@ cv::Mat CardAugmenterNode::augmentCard(const cv::Mat& card, cv::Mat background) 
 
     return background;
 }
-inline void CardAugmenterNode::saveGeneratedImage(const cv::Mat& image, int index) {
+inline void CardAugmenter::saveGeneratedImage(const cv::Mat& image, int index) {
     if (image.empty()) {
-        RCLCPP_ERROR(this->get_logger(), "Az elmenteni kívánt kép üres, nem lehet menteni.");
+        std::cerr << "Hiba: Az elmenteni kívánt kép üres, nem lehet menteni." << std::endl;
         return;
     }
     std::string output_path = output_dir_ + "/generated_image_new_" + std::to_string(index) + ".jpg";
     cv::imwrite(output_path, image);
-    RCLCPP_INFO(this->get_logger(), "Kép elmentve: %s", output_path.c_str());
+    std::cout << "Kép elmentve: " << output_path.c_str() << std::endl;
 }
 //egy kártyás verzió
 /*void CardAugmenterNode::processAllCards() {
@@ -191,43 +211,40 @@ inline void CardAugmenterNode::saveGeneratedImage(const cv::Mat& image, int inde
     }
     RCLCPP_INFO(this->get_logger(), "processAllCards befejeződött.");
 }*/
-void CardAugmenterNode::processAllCards() {
-    RCLCPP_INFO(this->get_logger(), "processAllCards elkezdődött.");
+void CardAugmenter::processAllCards() {
+    std::cout << "processAllCards elkezdődött." << std::endl;
     for (size_t i = 0; i < card_images_.size(); ++i) {
-        RCLCPP_INFO(this->get_logger(), "Háttér betöltése...");
+        std::cout << "Háttér betöltése..." << std::endl;
         cv::Mat background = loadRandomBackground();
         if (background.empty()) {
-            RCLCPP_ERROR(this->get_logger(), "A háttérkép betöltése sikertelen.");
+            std::cerr << "A háttérkép betöltése sikertelen." << std::endl;
             continue;
         }
         //random masik kartya
         std::uniform_int_distribution<int> dist(0, card_images_.size() - 1);
         const cv::Mat& second_card = card_images_[dist(rng_)];
         if (second_card.empty()) {
-            RCLCPP_WARN(this->get_logger(), "A második kártya üres, nem generálható kép.");
+            std::clog << "A második kártya üres, nem generálható kép." << std::endl;
             continue;
         }
 
-        RCLCPP_INFO(this->get_logger(), "Kártyák augmentálása...");
+        std::cout << "Kártyák augmentálása..." << std::endl;
         cv::Mat augmented_image = background.clone();
         //augm
         augmented_image = augmentCard(card_images_[i], augmented_image);
         augmented_image = augmentCard(second_card, augmented_image);
 
-        RCLCPP_INFO(this->get_logger(), "Generált kép mentése...");
+        std::cout << "Generált kép mentése..." << std::endl;
         saveGeneratedImage(augmented_image, i);
     }
-    RCLCPP_INFO(this->get_logger(), "processAllCards befejeződött.");
+    std::cout << "processAllCards befejeződött." << std::endl;
 }
 
 int main(int argc, char** argv) {
-    rclcpp::init(argc, argv);
-
     if (argc < 3) {
         std::cerr << "Használat: " << argv[0] << " <kártyák mappa elérési útja> <output mappa elérési útja>\n";
         return 1;
     }
-
     std::string cards_dir = argv[1];
     std::string output_dir = argv[2];
     if (!fs::exists(cards_dir) || !fs::is_directory(cards_dir)) {
@@ -242,9 +259,6 @@ int main(int argc, char** argv) {
         return 1;
     }
     
-    auto node = std::make_shared<CardAugmenterNode>(cards_dir, output_dir);
-    node->processAllCards();
-    
-    rclcpp::shutdown();
+  
     return 0;
 }
