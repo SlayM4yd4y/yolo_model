@@ -1,8 +1,8 @@
 # Parameters
-nc: 22  # Number of classes (beállításod szerint)
+nc: 22  
 scales:  # Model compound scaling constants
-  n: [0.50, 0.25, 1024]
-  s: [0.50, 0.50, 1024]
+  n: [0.50, 0.25, 640]
+  s: [0.50, 0.50, 640]
   m: [0.50, 1.00, 512]
   l: [1.00, 1.00, 512]
   x: [1.00, 1.50, 512]
