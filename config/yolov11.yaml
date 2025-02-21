@@ -1,5 +1,5 @@
 # Parameters
-nc: 22  
+nc: 2 #22  
 scales:  # Model compound scaling constants
   n: [0.50, 0.25, 640]
   s: [0.50, 0.50, 640]
