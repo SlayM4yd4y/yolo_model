@@ -1,13 +1,11 @@
-# Parameters
 nc: 2 #22  
-scales:  # Model compound scaling constants
+scales:  
   n: [0.50, 0.25, 640]
   s: [0.50, 0.50, 640]
   m: [0.50, 1.00, 512]
   l: [1.00, 1.00, 512]
   x: [1.00, 1.50, 512]
 
-# YOLO11 Backbone
 backbone:
   # [from, repeats, module, args]
   - [-1, 1, Conv, [64, 3, 2]]  # P1/2
@@ -22,7 +20,6 @@ backbone:
   - [-1, 1, SPPF, [1024, 5]]  # Spatial Pyramid Pooling
   - [-1, 2, C2PSA, [1024]]  # Attention Mechanism
 
-# YOLO11 Head
 head:
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
   - [[-1, 6], 1, Concat, [1]]  # Concatenate with backbone P4
@@ -40,4 +37,4 @@ head:
   - [[-1, 10], 1, Concat, [1]]  # Concatenate with P5
   - [-1, 2, C3k2, [1024, True]]  # Large scale (P5/32)
 
-  - [[16, 19, 22], 1, Detect, [nc]]  # Detect layers with proper input list
+  - [[16, 19, 22], 1, Detect, [nc]] 
