@@ -22,9 +22,9 @@ public:
         std::cout<<"Node inicializálása"<<std::endl;
         //todo - ok for now
         //std::string pkg_path = package_path();
-        std::string pkg_path = "";
-        std::cout<<"Kérem adja meg a forrás képek mappáit tartalmazó mappa elérési útját: ";
-        std::cin >> pkg_path;
+        std::string pkg_path = "../img/card_gen_img";
+        //std::cout<<"Kérem adja meg a forrás képek mappáit tartalmazó mappa elérési útját: ";
+        //std::cin >> pkg_path;
         names = {"John Doe", "Jane Doe", "John Smith"};
         nCodes = {"A1B2C3", "D4E5F6", "G7H8I9"};
         ids = {"56981237", "66982238", "45981239"};
@@ -59,9 +59,9 @@ public:
         cv::Mat card(359, 553, CV_8UC3, cv::Scalar(255, 255, 255));
         auto ft2 = cv::freetype::createFreeType2();
         //todo
-        std::cout<<"Kérem adja meg a betűtípus (.ttf fájl) elérési útját: ";
-        std::string font_path = "";
-        std::cin >> font_path;
+        //std::cout<<"Kérem adja meg a betűtípust tartalmazó mappa elérési útját: ";
+        std::string font_path = "../fonts/Montserrat/Montserrat-VariableFont_wght.ttf";
+        //std::cin >> font_path;
         ft2->loadFontData(font_path, 0);
 
         cv::Mat card_template = cv::imread(cardTemplates[template_idx]);
@@ -110,9 +110,9 @@ int main(int argc, char **argv) {
 
     //todo
     //card_gen->generate_card(package_path() + "/generated_cards");
-    std::string pkg_path = "";
-    std::cout<<"Kérem adja meg a kimeneti mappa elérési útját: ";
-    std::cin >> pkg_path;
+    std::string pkg_path = "../img";
+    //std::cout<<"Kérem adja meg a kimeneti mappa elérési útját: ";
+    //std::cin >> pkg_path;
     card_gen.generate_card(pkg_path + "/generated_cards");
 
     return 0;
