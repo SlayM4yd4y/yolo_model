@@ -1,5 +1,6 @@
-import argparse, os, yaml, torch
+import argparse, os, yaml, torch, zenoh
 from ultralytics import YOLO
+from zenoh import Session
 
 def get_next_train_folder(base_dir):
     os.makedirs(base_dir, exist_ok=True)
@@ -9,6 +10,7 @@ def get_next_train_folder(base_dir):
     return os.path.join(base_dir, f"train{next_train_num}")
 
 def train_yolo(model_config, data_config, hyp_config, epochs, batch_size, img_size, output_format, save_dir, optimizer):
+    sessionZ = zenoh.open(zenoh.Config())
     train_folder = get_next_train_folder(save_dir)
     os.makedirs(train_folder, exist_ok=True)
 
@@ -20,14 +22,15 @@ def train_yolo(model_config, data_config, hyp_config, epochs, batch_size, img_si
     print(f"- Saving to: {train_folder}")
     print(f"- Optimizer: {optimizer}")
 
+    sessionZ.put("yolo/trainig/status", "Training started...")
     hyp_params = {}
     if os.path.exists(hyp_config):
         with open(hyp_config, "r") as f:
             hyp_params = yaml.safe_load(f)
-            print(f"✅ Loaded hyperparameters from {hyp_config}")
+            print(f"Loaded hyperparameters from {hyp_config}")
 
     model = YOLO(model_config)
-    model.train(
+    results = model.train(
         data=data_config,
         epochs=epochs,
         batch=batch_size,
@@ -38,16 +41,27 @@ def train_yolo(model_config, data_config, hyp_config, epochs, batch_size, img_si
         optimizer=optimizer,
         **hyp_params  
     )
+    
+    loss = results.speed.get("loss", "unknown") 
+    training_info = (f"Epoch number: {epochs}, batches: {batch_size}\n"
+                 f"Loss: {loss}, data: {data_config},\n"
+                 f"Model: {model_config}, hyp: {hyp_config}")
+
+    sessionZ.put("yolo/training/info", training_info)
 
     weights_dir = os.path.join(train_folder, "weights")
     os.makedirs(weights_dir, exist_ok=True)
 
     pt_path = os.path.join(weights_dir, "yolov11n.pt")
     torch.save(model.model.state_dict(), pt_path) #csak a sulyokat mentem, resultsban ugyis benne a teljes best.pt
-    print(f"✅ Model trained and saved as PT: {pt_path}")
+    print(f"Model trained and saved as PT: {pt_path}")
+    sessionZ.put("yolo/training/model_path", pt_path)
     if output_format == "onnx":
         model.export(format="onnx")
-        print(f"✅ Model exported as ONNX.")
+        print(f"Model exported as ONNX.")
+        sessionZ.put("yolo/training/model_format", "onnx")
+    sessionZ.put("yolo/training/status", "Completed!")
+    sessionZ.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train YOLOv11")
