@@ -10,3 +10,4 @@ cards_dataset.yolov11/
 segedlet.txt
 yolov11n.pt
 src/card_gen
+latest_frame.jpg

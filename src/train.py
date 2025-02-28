@@ -1,4 +1,4 @@
-import argparse, os, yaml, torch, zenoh
+import argparse, os, yaml, torch, zenoh, json5
 from ultralytics import YOLO
 from zenoh import Session
 
@@ -10,11 +10,13 @@ def get_next_train_folder(base_dir):
     return os.path.join(base_dir, f"train{next_train_num}")
 
 def train_yolo(model_config, data_config, hyp_config, epochs, batch_size, img_size, output_format, save_dir, optimizer):
+    #config = zenoh.Config.from_file('config/zenoh_trainconfig.json5')
     sessionZ = zenoh.open(zenoh.Config())
+    
     train_folder = get_next_train_folder(save_dir)
     os.makedirs(train_folder, exist_ok=True)
 
-    print(f"🔹 Training YOLOv11 with:")
+    print(f"[YOLOv11:TRAIN] Training YOLOv11 with:")
     print(f"- Model config: {model_config}")
     print(f"- Data config: {data_config}")
     print(f"- Hyperparameters: {hyp_config}")
@@ -27,7 +29,7 @@ def train_yolo(model_config, data_config, hyp_config, epochs, batch_size, img_si
     if os.path.exists(hyp_config):
         with open(hyp_config, "r") as f:
             hyp_params = yaml.safe_load(f)
-            print(f"Loaded hyperparameters from {hyp_config}")
+            print(f"[YOLOv11:TRAIN] Loaded hyperparameters from {hyp_config}")
 
     model = YOLO(model_config)
     results = model.train(
@@ -54,11 +56,11 @@ def train_yolo(model_config, data_config, hyp_config, epochs, batch_size, img_si
 
     pt_path = os.path.join(weights_dir, "yolov11n.pt")
     torch.save(model.model.state_dict(), pt_path) #csak a sulyokat mentem, resultsban ugyis benne a teljes best.pt
-    print(f"Model trained and saved as PT: {pt_path}")
+    print(f"[YOLOv11:TRAIN] Model trained and saved as PT: {pt_path}")
     sessionZ.put("yolo/training/model_path", pt_path)
     if output_format == "onnx":
         model.export(format="onnx")
-        print(f"Model exported as ONNX.")
+        print(f"[YOLOv11:TRAIN] Model exported as ONNX.")
         sessionZ.put("yolo/training/model_format", "onnx")
     sessionZ.put("yolo/training/status", "Completed!")
     sessionZ.close()

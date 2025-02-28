@@ -7,6 +7,7 @@ opencv-python
 numpy
 matplotlib
 tqdm
+json5
 ultralytics
 zenoh
 eclipse-zenoh==1.2.1
