@@ -1,6 +1,23 @@
-import os, cv2, argparse, torch, zenoh, json, time, subprocess
+import os, cv2, argparse, torch, zenoh, json, time, threading
+import numpy as np
 from pathlib import Path
 from ultralytics import YOLO
+
+class ZenohCameraSubscriber:
+    def __init__(self, session, topic="camera/frame"):
+        self.frame = None
+        self.lock = threading.Lock()
+        self.subscriber = session.declare_subscriber(topic, self.callback)
+
+    def callback(self, sample):
+        np_arr = np.frombuffer(sample.payload, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        with self.lock:
+            self.frame = frame
+
+    def get_frame(self):
+        with self.lock:
+            return self.frame.copy() if self.frame is not None else None
 
 def get_latest_prediction_folder(base_path):
     latest_folder = None
@@ -16,11 +33,19 @@ def get_latest_prediction_folder(base_path):
     return str(latest_folder) if latest_folder else None
 
 
-def run_detection(weights, source, save_results, save_dir, show):
+def run_detection(weights, source, save_results, save_dir, show, publisher):
     print("[YOLOv11:DETECT] Starting detection...")
 
-    model = YOLO(weights)  
-    model.predict(source=source, save=save_results, project=save_dir, show=show, save_txt=True)
+    res = weights.predict(source=source, save=save_results, project=save_dir, show=show, save_txt=True, stream=True)
+    for r in res:
+        detected_objects = [int(box.cls[0]) for box in r.boxes]  
+        object_count = len(detected_objects)
+
+        detection_message = json.dumps({
+            "object_count": object_count,
+            "detected_objects": detected_objects
+        })
+        publisher.put(detection_message) 
 
     latest_folder = get_latest_prediction_folder(save_dir)
 
@@ -62,22 +87,41 @@ def parse_detection_results(results_dir):
 
     return detected_objects
 
-def detect_and_publish(config, weights, source, save_results, save_dir, show):
+def detect_and_publish(config, weights, source_type, source, save_results, save_dir, show):
+    print("[ZENOH:DETECT] Initializing Zenoh session...")
+
+    zenoh_config = zenoh.Config.from_file(config) if config else zenoh.Config()
+    session = zenoh.open(zenoh_config)
+    publisher = session.declare_publisher("yolo/detection/results")
+    model = YOLO(weights)
+    camera = None
+    if source_type == "camera":
+        camera = ZenohCameraSubscriber(session, "camera/frame")
     try:
-        print("[ZENOH:DETECT] Initializing Zenoh session...")
-        if config: 
-            zenoh_config = zenoh.Config.from_file(config)
-        else:
-            zenoh_config = zenoh.Config()
-        session = zenoh.open(zenoh_config)
-        publisher = session.declare_publisher("yolo/detection/results")
-        detected_objects = run_detection(weights, source, save_results, save_dir, show)
-        detection_message = json.dumps({"detected_objects": detected_objects})
-        publisher.put(detection_message)
-        print(f"[ZENOH:DETECT] Published detection results: {detection_message}")
+        while True:
+            if source_type == "camera":
+                frame = camera.get_frame()
+                if frame is None:
+                    time.sleep(0.1)
+                    continue
+                run_detection(model, frame, save_results, save_dir, show, publisher)
+            else:
+                run_detection(model, source, save_results, save_dir, show, publisher)
+
+            if source_type in ["image", "video"]:
+                break
+            if cv2.waitKey(1) & 0xFF == 26:  #
+                print("[ZENOH:DETECT] Ctrl+Z pressed. Closing OpenCV window...")
+                cv2.destroyAllWindows()
+                break
+            time.sleep(0.1)
+
+    except KeyboardInterrupt:
+        print("[ZENOH:DETECT] Stopping detection...")
+    finally:
         session.close()
-    except Exception as e:
-        print(f"[ZENOH:DETECT] Error during detection and publishing: {e}")
+        print("[ZENOH:DETECT] Zenoh session closed.")
+    
 
 def main():
     parser = argparse.ArgumentParser(description="YOLOv11 Detection with Zenoh")
@@ -91,27 +135,27 @@ def main():
     parser.add_argument("--save_results", action="store_true", help="Save detection results")
     parser.add_argument("--save_dir", type=str, default="det_results", help="Directory to save detection results")
     parser.add_argument("--show", action="store_true", help="Display image results")
-
     args = parser.parse_args()
 
-    cam_proc = None
     if args.source_type == "video":
+        if not args.video_path:
+            print("[ERROR] Video source path is missing!")
+            return
         source = args.video_path
+
     elif args.source_type == "image":
+        if not args.image_path:
+            print("[ERROR] Image source path is missing!")
+            return
         source = args.image_path
     elif args.source_type == "camera":
-        source = "latest_frame.jpg"
-        print("[YOLOv11:DETECT] Starting camera stream...")
-        cam_cmd = ["python", "src/camera_pub.py", "--camera_id", str(args.camera_id), "--camera_ip", args.camera_ip]
-        cam_proc = subprocess.Popen(cam_cmd) 
+        source = None  
     else:
         print(f"[ZENOH:DETECT] Invalid source type. Exiting...")
         return
 
-    detect_and_publish(args.config, args.weights, source, args.save_results, args.save_dir, args.show)
-    if cam_proc is not None:
-        cam_proc.terminate()
-        print(f"[ZENOH:DETECT] Camera publisher stopped.")
+    detect_and_publish(args.config, args.weights, args.source_type, source, args.save_results, args.save_dir, args.show)
+ 
 
 if __name__ == "__main__":
     main()
