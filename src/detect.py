@@ -100,13 +100,19 @@ def parse_detection_results(results_dir):
 
     return detected_objects
 
-def detect_and_publish(config, weights, source_type, source, save_results, save_dir, show):
+def detect_and_publish(config, weights, source_type, source, camera_ip, save_results, save_dir, show):
     print("[ZENOH:DETECT] Initializing Zenoh session...")
     global session
     zenoh_config = zenoh.Config.from_file(config) if config else zenoh.Config()
     session = zenoh.open(zenoh_config)
     publisher = session.declare_publisher("yolo/detection/results")
+    ip_cam_pub = session.declare_publisher("camera/ip")
     model = YOLO(weights)
+
+    if camera_ip:
+        print(f"[ZENOH:DETECT] Publishing camera IP address: {camera_ip}")
+        ip_cam_pub.put(camera_ip.encode("utf-8"))
+
     camera = None
     if source_type == "camera":
         camera = ZenohCameraSubscriber(session, "camera/frame")
@@ -177,7 +183,7 @@ def main():
         print(f"[ZENOH:DETECT] Invalid source type. Exiting...")
         return
 
-    detect_and_publish(args.config, args.weights, args.source_type, source, args.save_results, args.save_dir, args.show)
+    detect_and_publish(args.config, args.weights, args.source_type, source, args.camera_ip, args.save_results, args.save_dir, args.show)
  
 
 if __name__ == "__main__":
