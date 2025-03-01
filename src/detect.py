@@ -1,7 +1,9 @@
-import os, cv2, argparse, torch, zenoh, json, time, threading
+import os, cv2, argparse, torch, zenoh, json, time, threading, signal, sys
 import numpy as np
 from pathlib import Path
 from ultralytics import YOLO
+
+session = None
 
 class ZenohCameraSubscriber:
     def __init__(self, session, topic="camera/frame"):
@@ -10,14 +12,25 @@ class ZenohCameraSubscriber:
         self.subscriber = session.declare_subscriber(topic, self.callback)
 
     def callback(self, sample):
-        np_arr = np.frombuffer(sample.payload, np.uint8)
-        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        np_arr = np.frombuffer(bytes(sample.payload), np.uint8)
+        if np_arr is not None and len(np_arr) > 0:
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        else:
+            print("[ZENOH:SUBSCRIBER] Empty or corrupted frame!")
+            return
         with self.lock:
             self.frame = frame
 
     def get_frame(self):
         with self.lock:
             return self.frame.copy() if self.frame is not None else None
+
+def signal_handler(sig, frame):
+    global session
+    if session:
+        print(f"[ZENOH:DETECT] Termination signal received. Exiting...")
+        session.close()
+    sys.exit(0)
 
 def get_latest_prediction_folder(base_path):
     latest_folder = None
@@ -89,7 +102,7 @@ def parse_detection_results(results_dir):
 
 def detect_and_publish(config, weights, source_type, source, save_results, save_dir, show):
     print("[ZENOH:DETECT] Initializing Zenoh session...")
-
+    global session
     zenoh_config = zenoh.Config.from_file(config) if config else zenoh.Config()
     session = zenoh.open(zenoh_config)
     publisher = session.declare_publisher("yolo/detection/results")
@@ -98,12 +111,21 @@ def detect_and_publish(config, weights, source_type, source, save_results, save_
     if source_type == "camera":
         camera = ZenohCameraSubscriber(session, "camera/frame")
     try:
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+        max_retries, retry_count = 50, 0
         while True:
             if source_type == "camera":
                 frame = camera.get_frame()
                 if frame is None:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        print("[ZENOH:DETECT] No frames received. Exiting...")
+                        break
                     time.sleep(0.1)
                     continue
+                retry_count = 0
                 run_detection(model, frame, save_results, save_dir, show, publisher)
             else:
                 run_detection(model, source, save_results, save_dir, show, publisher)
@@ -119,7 +141,8 @@ def detect_and_publish(config, weights, source_type, source, save_results, save_
     except KeyboardInterrupt:
         print("[ZENOH:DETECT] Stopping detection...")
     finally:
-        session.close()
+        if session:
+            session.close()
         print("[ZENOH:DETECT] Zenoh session closed.")
     
 
