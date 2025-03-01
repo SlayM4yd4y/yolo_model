@@ -10,9 +10,8 @@ def get_next_train_folder(base_dir):
     return os.path.join(base_dir, f"train{next_train_num}")
 
 def train_yolo(model_config, data_config, hyp_config, epochs, batch_size, img_size, output_format, save_dir, optimizer):
-    #config = zenoh.Config.from_file('config/zenoh_trainconfig.json5')
+    #config = zenoh.Config.from_file("config/zenoh_trainconfig.json5") if config else zenoh.Config()
     sessionZ = zenoh.open(zenoh.Config())
-    
     train_folder = get_next_train_folder(save_dir)
     os.makedirs(train_folder, exist_ok=True)
 
