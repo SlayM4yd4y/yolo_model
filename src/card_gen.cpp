@@ -19,7 +19,7 @@ private:
     std::vector<std::string> cardTemplates;
 public:
     CardGenerator(){
-        std::cout<<"Node inicializálása"<<std::endl;
+        std::cout<<"Példány inicializálása"<<std::endl;
         //todo - ok for now
         //std::string pkg_path = package_path();
         std::string pkg_path = "../img/card_gen_img";
