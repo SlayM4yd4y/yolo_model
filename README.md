@@ -2,7 +2,7 @@
 
 **ZENOH YOLO MODEL** - Zenoh-based Object Detection
 
-A deep learning-based YOLOv11 object detection project utilizing Zenoh protocol for efficient communication and data streaming. This implementation supports real-time detection from multiple input sources, including cameras, video files, and images.Developed and tested in a WSL (Windows Subsystem for Linux) environment. Written in Python and C++ for a university class.
+A deep learning-based ```YOLOv11``` object detection project utilizing ```Zenoh``` protocol for efficient communication and data streaming. This implementation supports real-time detection from multiple input sources, including cameras, video files, and images. Developed and tested in a ```WSL``` (Windows Subsystem for Linux) environment. Written in ```Python``` and ```C++``` for a university class.
 
 ### Features
 
